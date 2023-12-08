@@ -2,26 +2,20 @@ import os
 
 
 def split_questions(questions_text):
-    part_questions = []
+    part_questions = {}
     split_text_questions = questions_text.split('\n\n')
     for nom in range(len(split_text_questions)):
-        try:
-            if 'Вопрос' in split_text_questions[nom] and 'Ответ' in split_text_questions[nom+1]:
-                part_questions.append({
-                    'questions': split_text_questions[nom].split(':')[-1],
-                    'answer': split_text_questions[nom+1].split(':')[-1]
-                })
-        except IndexError:
-            pass
+        if split_text_questions[nom].startswith('Вопрос') and split_text_questions[nom+1].startswith('Ответ'):
+            part_questions[split_text_questions[nom].split(':')[-1]] = split_text_questions[nom+1].split(':')[-1]
     return part_questions
 
 
 def read_questions_files(folder_path):
-    questions = []
+    questions = {}
     for root, directories, files in os.walk(folder_path):
         for file in files:
             with open(os.path.join(root, file), 'r', encoding='KOI8-R') as question_file:
-                questions.extend(split_questions(question_file.read()))
+                questions.update(split_questions(question_file.read()))
     return questions
 
 
