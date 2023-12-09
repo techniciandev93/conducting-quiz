@@ -63,6 +63,7 @@ def handler_give_up(update, context):
     answer = questions[question.decode()]
     update.message.reply_text(f'Вот тебе правильный ответ: {answer}')
     redis_connection.delete(update.message.from_user.id)
+    update.message.reply_text(f'\nНовый вопрос')
     handle_new_question_request(update, context)
 
 
