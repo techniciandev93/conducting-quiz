@@ -73,7 +73,7 @@ def processing_vk_quiz(event, vk_api, questions, redis_connection):
             ratio = fuzz.token_sort_ratio(answer, user_answer)
 
             if ratio >= 80:
-                message = 'Правильно! Поздравляю! Для следующего вопроса нажми «Новый вопрос»'
+                message = 'Правильно! Поздравляю! Вот тебе новый вопрос»'
                 send_message_vk(event, vk_api, message)
                 redis_connection.delete(event.user_id)
             else:
