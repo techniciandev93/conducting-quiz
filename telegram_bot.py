@@ -1,3 +1,4 @@
+import argparse
 import logging
 import random
 import re
@@ -8,7 +9,7 @@ from fuzzywuzzy import fuzz
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, RegexHandler
 
-from main import read_questions_files
+from questions import read_questions_files
 
 
 logger = logging.getLogger('Logger quiz telegram bot')
@@ -31,115 +32,82 @@ def start(update, context):
     return QUESTION
 
 
-def handle_text(update, context):
-    question = connection_redis.get(update.message.from_user.id)
-    if question:
-        question = question.decode()
-
-    if update.message.text == 'Новый вопрос':
-        if question:
-            update.message.reply_text(f'Вы должны ответить на вопрос: {question}')
-        else:
-            question = random.choice(tuple(questions.keys()))
-            connection_redis.set(update.message.from_user.id, question)
-            update.message.reply_text(question)
-
-    elif update.message.text == 'Сдаться':
-        if question:
-            answer = questions[question]
-            update.message.reply_text(f'Вот тебе правильный ответ: {answer}')
-            connection_redis.delete(update.message.from_user.id)
-        else:
-            update.message.reply_text('Вы ещё не запрашивали вопрос.\nДля запроса вопроса нажми "Новый вопрос"')
-
-    else:
-        if not question:
-            update.message.reply_text('Для запроса вопроса нажми "Новый вопрос"')
-        else:
-            answer = re.split(r'[.(]', questions[question].replace('...', ''))[0].lower().strip()
-            user_answer = update.message.text.lower().strip()
-            ratio = fuzz.token_sort_ratio(answer, user_answer)
-
-            if ratio >= 80:
-                update.message.reply_text('Правильно! Поздравляю! Для следующего вопроса нажми «Новый вопрос»')
-                connection_redis.delete(update.message.from_user.id)
-            else:
-                update.message.reply_text('Неправильно… Попробуешь ещё раз?')
-
-
 def handle_new_question_request(update, context):
-    question = connection_redis.get(update.message.from_user.id)
+    question = redis_connection.get(update.message.from_user.id)
     if question:
         update.message.reply_text(f'Вы должны ответить на вопрос: {question.decode()}')
-        return ANSWER_QUESTION
     else:
         question = random.choice(tuple(questions.keys()))
-        connection_redis.set(update.message.from_user.id, question)
+        redis_connection.set(update.message.from_user.id, question)
         update.message.reply_text(question)
-        return ANSWER_QUESTION
+    return ANSWER_QUESTION
 
 
 def handle_solution_attempt(update, context):
-    question = connection_redis.get(update.message.from_user.id)
-    if not question:
-        update.message.reply_text('Для запроса вопроса нажми "Новый вопрос"')
-        return QUESTION
-    else:
-        answer = re.split(r'[.(]', questions[question.decode()].replace('...', ''))[0].lower().strip()
-        user_answer = update.message.text.lower().strip()
-        ratio = fuzz.token_sort_ratio(answer, user_answer)
+    question = redis_connection.get(update.message.from_user.id)
+    answer = re.split(r'[.(]', questions[question.decode()].replace('...', ''))[0].lower().strip()
+    user_answer = update.message.text.lower().strip()
+    ratio = fuzz.token_sort_ratio(answer, user_answer)
 
-        if ratio >= 80:
-            update.message.reply_text('Правильно! Поздравляю! Для следующего вопроса нажми «Новый вопрос»')
-            connection_redis.delete(update.message.from_user.id)
-            return QUESTION
-        else:
-            update.message.reply_text('Неправильно… Попробуешь ещё раз?')
-            return QUESTION
+    if ratio >= 80:
+        update.message.reply_text('Правильно! Поздравляю! Вот тебе следующий вопрос.')
+        redis_connection.delete(update.message.from_user.id)
+        return QUESTION
+
+    update.message.reply_text('Неправильно… Попробуешь ещё раз?')
+    return ANSWER_QUESTION
 
 
 def handler_give_up(update, context):
-    question = connection_redis.get(update.message.from_user.id)
+    question = redis_connection.get(update.message.from_user.id)
     answer = questions[question.decode()]
     update.message.reply_text(f'Вот тебе правильный ответ: {answer}')
-    connection_redis.delete(update.message.from_user.id)
-    return ConversationHandler.END
+    redis_connection.delete(update.message.from_user.id)
+    handle_new_question_request(update, context)
 
 
 if __name__ == '__main__':
-    env = Env()
-    env.read_env()
+    try:
+        env = Env()
+        env.read_env()
 
-    telegram_bot_token = env.str('TELEGRAM_BOT_TOKEN')
-    redis_url = env.str('REDIS_URL')
-    redis_port = env.str('REDIS_PORT')
-    redis_password = env.str('REDIS_PASSWORD')
+        telegram_bot_token = env.str('TELEGRAM_BOT_TOKEN')
+        redis_url = env.str('REDIS_URL')
+        redis_port = env.str('REDIS_PORT')
+        redis_password = env.str('REDIS_PASSWORD')
 
-    questions_path = 'quiz-questions/'
-    questions = read_questions_files(questions_path)
-    updater = Updater(telegram_bot_token)
-    connection_redis = redis.Redis(host=redis_url, port=redis_port, password=redis_password)
-    connection_redis.ping()
+        parser = argparse.ArgumentParser(description='Этот скрипт запускает бота викторин для телеграм '
+                                                     'по умолчанию без аргументов будет взят путь из корня проекта '
+                                                     'к каталогу quiz-questions/: python telegram_bot.py')
+        parser.add_argument('--path', type=str, help='Укажите путь к каталогу с вопросами',
+                            nargs='?', default='quiz-questions/')
+        args = parser.parse_args()
 
-    dispatcher = updater.dispatcher
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            QUESTION: [MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request)],
-            ANSWER_QUESTION: [MessageHandler(Filters.text & ~Filters.command, handle_solution_attempt)],
-        },
-        fallbacks=[MessageHandler(Filters.regex('^Сдаться$'), handler_give_up)],
-    )
-    dispatcher.add_handler(conv_handler)
+        questions = read_questions_files(args.path)
+        updater = Updater(telegram_bot_token)
+        redis_connection = redis.Redis(host=redis_url, port=redis_port, password=redis_password)
 
+        dispatcher = updater.dispatcher
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start)],
+            states={
+                QUESTION: [MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request)],
+                ANSWER_QUESTION: [
+                    MessageHandler(Filters.regex('^Сдаться$'), handler_give_up),
+                    MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request),
+                    MessageHandler(Filters.text & ~Filters.command, handle_solution_attempt)]
+            },
+            fallbacks=[],
+        )
+        dispatcher.add_handler(conv_handler)
 
-    #dispatcher.add_handler(CommandHandler('start', start))
-    #dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+        logging.basicConfig(
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+        )
+        logger.setLevel(logging.INFO)
+        logger.info('Бот телеграмм запущен')
 
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
-    )
-    logger.setLevel(logging.INFO)
-
-    updater.start_polling()
-    updater.idle()
+        updater.start_polling()
+        updater.idle()
+    except Exception as error:
+        logger.exception(error)

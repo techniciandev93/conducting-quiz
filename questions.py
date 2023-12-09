@@ -17,8 +17,3 @@ def read_questions_files(folder_path):
             with open(os.path.join(root, file), 'r', encoding='KOI8-R') as question_file:
                 questions.update(split_questions(question_file.read()))
     return questions
-
-
-if __name__ == '__main__':
-    questions_path = 'quiz-questions/'
-    a = read_questions_files(questions_path)
