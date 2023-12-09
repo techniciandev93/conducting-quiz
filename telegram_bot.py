@@ -7,7 +7,7 @@ import redis
 from environs import Env
 from fuzzywuzzy import fuzz
 from telegram import ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, RegexHandler
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 
 from questions import read_questions_files
 
