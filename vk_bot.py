@@ -34,6 +34,12 @@ def send_message_vk(event, vk_api, message):
     )
 
 
+def get_new_question(questions, event, vk_api, redis_connection):
+    question = random.choice(tuple(questions.keys()))
+    redis_connection.set(event.user_id, question)
+    send_message_vk(event, vk_api, question)
+
+
 def processing_vk_quiz(event, vk_api, questions, redis_connection):
     question = redis_connection.get(event.user_id)
     if question:
@@ -44,9 +50,7 @@ def processing_vk_quiz(event, vk_api, questions, redis_connection):
             message = f'Вы должны ответить на вопрос: {question}'
             send_message_vk(event, vk_api, message)
         else:
-            question = random.choice(tuple(questions.keys()))
-            redis_connection.set(event.user_id, question)
-            send_message_vk(event, vk_api, question)
+            get_new_question(questions, event, vk_api, redis_connection)
 
     elif event.text == 'Сдаться':
         if question:
@@ -76,6 +80,7 @@ def processing_vk_quiz(event, vk_api, questions, redis_connection):
                 message = 'Правильно! Поздравляю! Вот тебе новый вопрос»'
                 send_message_vk(event, vk_api, message)
                 redis_connection.delete(event.user_id)
+                get_new_question(questions, event, vk_api, redis_connection)
             else:
                 message = 'Неправильно… Попробуешь ещё раз?'
                 send_message_vk(event, vk_api, message)

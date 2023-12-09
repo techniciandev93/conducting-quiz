@@ -52,7 +52,7 @@ def handle_solution_attempt(update, context):
     if ratio >= 80:
         update.message.reply_text('Правильно! Поздравляю! Вот тебе следующий вопрос.')
         redis_connection.delete(update.message.from_user.id)
-        return QUESTION
+        return handle_new_question_request(update, context)
 
     update.message.reply_text('Неправильно… Попробуешь ещё раз?')
     return ANSWER_QUESTION
