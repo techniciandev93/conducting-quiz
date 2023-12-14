@@ -2,6 +2,7 @@ import argparse
 import logging
 import random
 import re
+from functools import partial
 
 import redis
 from environs import Env
@@ -32,7 +33,7 @@ def start(update, context):
     return QUESTION
 
 
-def handle_new_question_request(update, context):
+def handle_new_question_request(update, context, redis_connection):
     question = redis_connection.get(update.message.from_user.id)
     if question:
         update.message.reply_text(f'Вы должны ответить на вопрос: {question.decode()}')
@@ -43,7 +44,7 @@ def handle_new_question_request(update, context):
     return ANSWER_QUESTION
 
 
-def handle_solution_attempt(update, context):
+def handle_solution_attempt(update, context, redis_connection):
     question = redis_connection.get(update.message.from_user.id)
     answer = re.split(r'[.(]', questions[question.decode()].replace('...', ''))[0].lower().strip()
     user_answer = update.message.text.lower().strip()
@@ -52,19 +53,19 @@ def handle_solution_attempt(update, context):
     if ratio >= 80:
         update.message.reply_text('Правильно! Поздравляю! Вот тебе следующий вопрос.')
         redis_connection.delete(update.message.from_user.id)
-        return handle_new_question_request(update, context)
+        return handle_new_question_request(update, context, redis_connection)
 
     update.message.reply_text('Неправильно… Попробуешь ещё раз?')
     return ANSWER_QUESTION
 
 
-def handler_give_up(update, context):
+def handler_give_up(update, context, redis_connection, questions):
     question = redis_connection.get(update.message.from_user.id)
     answer = questions[question.decode()]
     update.message.reply_text(f'Вот тебе правильный ответ: {answer}')
     redis_connection.delete(update.message.from_user.id)
     update.message.reply_text(f'\nНовый вопрос')
-    handle_new_question_request(update, context)
+    handle_new_question_request(update, context, redis_connection)
 
 
 if __name__ == '__main__':
@@ -88,15 +89,25 @@ if __name__ == '__main__':
         updater = Updater(telegram_bot_token)
         redis_connection = redis.Redis(host=redis_url, port=redis_port, password=redis_password)
 
+        handle_new_question_request_with_args = partial(handle_new_question_request,
+                                                        redis_connection=redis_connection)
+
+        handle_solution_attempt_with_args = partial(handle_solution_attempt,
+                                                    redis_connection=redis_connection)
+
+        handler_give_up_with_args = partial(handler_give_up,
+                                            redis_connection=redis_connection,
+                                            questions=questions)
+
         dispatcher = updater.dispatcher
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start)],
             states={
-                QUESTION: [MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request)],
+                QUESTION: [MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request_with_args)],
                 ANSWER_QUESTION: [
-                    MessageHandler(Filters.regex('^Сдаться$'), handler_give_up),
-                    MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request),
-                    MessageHandler(Filters.text & ~Filters.command, handle_solution_attempt)]
+                    MessageHandler(Filters.regex('^Сдаться$'), handler_give_up_with_args),
+                    MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request_with_args),
+                    MessageHandler(Filters.text & ~Filters.command, handle_solution_attempt_with_args)]
             },
             fallbacks=[],
         )
