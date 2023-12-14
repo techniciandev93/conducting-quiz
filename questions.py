@@ -4,10 +4,12 @@ import os
 def split_questions(questions_text):
     part_questions = {}
     split_text_questions = questions_text.split('\n\n')
+    total_questions = len(split_text_questions)
     for nom, question in enumerate(split_text_questions):
-        answer = split_text_questions[nom + 1]
-        if question.startswith('Вопрос') and answer.startswith('Ответ'):
-            part_questions[question.split(':')[-1].strip()] = answer.split(':')[-1].strip()
+        if nom + 1 < total_questions:
+            answer = split_text_questions[nom + 1]
+            if question.startswith('Вопрос') and answer.startswith('Ответ'):
+                part_questions[question.split(':')[-1].strip()] = answer.split(':')[-1].strip()
     return part_questions
 
 
