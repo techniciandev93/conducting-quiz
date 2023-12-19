@@ -44,7 +44,7 @@ def handle_new_question_request(update, context, redis_connection):
     return ANSWER_QUESTION
 
 
-def handle_solution_attempt(update, context, redis_connection):
+def handle_solution_attempt(update, context, redis_connection, questions):
     question = redis_connection.get(update.message.from_user.id)
     answer = re.split(r'[.(]', questions[question.decode()].replace('...', ''))[0].lower().strip()
     user_answer = update.message.text.lower().strip()
@@ -93,7 +93,7 @@ if __name__ == '__main__':
                                                         redis_connection=redis_connection)
 
         handle_solution_attempt_with_args = partial(handle_solution_attempt,
-                                                    redis_connection=redis_connection)
+                                                    redis_connection=redis_connection, questions=questions)
 
         handler_give_up_with_args = partial(handler_give_up,
                                             redis_connection=redis_connection,
