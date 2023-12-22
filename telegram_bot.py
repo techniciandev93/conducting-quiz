@@ -33,7 +33,7 @@ def start(update, context):
     return QUESTION
 
 
-def handle_new_question_request(update, context, redis_connection):
+def handle_new_question_request(update, context, redis_connection, questions):
     question = redis_connection.get(update.message.from_user.id)
     if question:
         update.message.reply_text(f'Вы должны ответить на вопрос: {question.decode()}')
@@ -90,7 +90,8 @@ if __name__ == '__main__':
         redis_connection = redis.Redis(host=redis_url, port=redis_port, password=redis_password)
 
         handle_new_question_request_with_args = partial(handle_new_question_request,
-                                                        redis_connection=redis_connection)
+                                                        redis_connection=redis_connection,
+                                                        questions=questions)
 
         handle_solution_attempt_with_args = partial(handle_solution_attempt,
                                                     redis_connection=redis_connection, questions=questions)
